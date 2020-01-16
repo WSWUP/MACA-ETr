@@ -7,4 +7,4 @@ __author__ = 'John Volk'
 __version__ = '0.0.1'
 
 
-from maca import MACA
+from macaetr.maca import MACA

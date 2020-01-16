@@ -6,9 +6,7 @@ Python tools for downloading and using MACA downscaled and bias corrected climat
 import numpy as np
 import pandas as pd
 import refet
-from pathlib import Path
-
-
+import xarray
 
 class MACA(object):
     """
@@ -91,7 +89,7 @@ class MACA(object):
             'name':'vapor_pres_def',
             'internal_name':'vpd',
             'server_name':'vpd',
-            'units':'%'
+            'units':'kPa'
         },
         'rs':{
             'name':'rs',
@@ -132,7 +130,8 @@ class MACA(object):
     }
 
     def __init__(self):
-        pass
+        self.data = None
+        self.coordinates = None
 
 
     def _check_arguments(self,variable, date_start, date_end, product, model, 
@@ -195,13 +194,13 @@ class MACA(object):
         model = f'{model}_r1i1p1'
         start = MACA.date_limits.get(scen)[0]
         end = MACA.date_limits.get(scen)[1]
-        suff = 'CONUS_daily.nc' if product == 'macav2' else 'CONUS_daily_aggregated.nc'
+        suff = 'CONUS_daily.nc#fillmismatch' if product == 'macav2' else 'CONUS_daily_aggregated.nc#fillmismatch'
 
         return f'{pref}{prod}_{variable}_{model}_{scen}_{start}_{end}_{suff}'
 
     def download(self, lat, lon, start_date, end_date, variable, 
             model='GFDL-ESM2G', product='macav2', scenario='rcp85',
-            ret='np_array'):
+            ret='pd_dataframe'):
         """
         """
         ret_options = ('np_array','xarray','pd_series','pd_dataframe')
@@ -220,9 +219,21 @@ class MACA(object):
             method='nearest'
         ).drop('crs')
 
-        self.data = None
+        self.scenario = scenario
+        self.model = model
+        self.product = product
+
+        # attrs will get overwritten with subsequent downloads
         self.metadata = ds.attrs
+        if self.coordinates:
+            t1=self.coordinates.get('lon').values != ds.coords.get('lon').values
+            t2=self.coordinates.get('lat').values != ds.coords.get('lat').values
+            if t1 or t2 and ret == 'pd_dataframe':
+                print('Downloading a new location, creating a new dataframe.')
+                self.data = None
         self.coordinates = ds.coords
+        self.centroid_lat = float(ds.coords.get('lat').values)
+        self.centroid_lon = float(ds.coords.get('lon').values) - 360 # dec. deg.
         self.var_name = self.var_info.get(variable).get('name')
         self.var_units = self.var_info.get(variable).get('units')
         internal_name = f'{self.var_info.get(variable).get("internal_name")}'
@@ -238,9 +249,15 @@ class MACA(object):
             self.data.name = self.var_name
             self.data.index.name = 'date'
         elif ret == 'pd_dataframe':
-            self.data = ds.drop(['lat','lon']).to_dataframe().rename(
-                columns={internal_name:self.var_name}
-            )
+            if isinstance(self.data, pd.DataFrame):
+                self.data[self.var_name] = ds.drop(
+                    ['lat','lon']).to_dataframe().rename(
+                        columns={internal_name:self.var_name}
+                )
+            else:
+                self.data = ds.drop(['lat','lon']).to_dataframe().rename(
+                    columns={internal_name:self.var_name}
+                )
             self.data.index.name = 'date'
         else:
             print(
@@ -252,8 +269,70 @@ class MACA(object):
 
         return self.data
 
-    def daily_ETr(self, reference="tall"):
+    def daily_refet(self, lat, lon, elev, anemometer_height, start_date, 
+            end_date, model='GFDL-ESM2G', product='macav2', scenario='rcp85'):
         """
+        Download MACAv2 or livneh data required and calculate short and tall
+        (abbreviated ETo and ETr) ASCE standardized reference 
+        evapotranspiration.
+
+        TODO: estimate vapor pressure from livneh variables (air temp. and q)
         """
-        pass
+        if product == 'livneh':
+            print('Sorry, ref ET calcs not implemented for Livneh data yet.')
+            return
+
+        if product == 'livneh':
+            get_vars = ['tmax', 'tmin','rs','wind_mean','spec_hum']
+        elif product == 'macav2':
+            get_vars = ['tmax','tmin','rs','rel_hum_max','rel_hum_min',
+                    'wind_east','wind_north','vapor_pres_def','spec_hum']
+        else:
+            print(f'ERROR: {product} not a valid dataset product, aborting.')
+            return
+        # wipe out any existing instance data to avoid issues
+        self.data = None
+
+        for v in get_vars:
+            self.download(lat, lon, start_date, end_date, v, 
+                model=model, product=product, scenario=scenario,
+                ret='pd_dataframe'
+            )
+
+        self.data['tavg'] = self.data[['tmin','tmax']].mean(1)
+        # convert temps to celcius
+        self.data[['tmin_c','tmax_c','tavg_c']] =\
+            self.data[['tmin','tmax','tavg']] - 273.15
+
+        if product == 'macav2':
+            self.data['wind_mean'] = self.data[
+                ['eastward_wind','northward_wind']
+            ].abs().mean(1) # mean of absolute wind speeds
+            # estimate sat. vapor press
+            es = 0.6108*np.exp(17.27*self.data.tavg_c / (self.data.tavg_c + 237.3))
+            self.data['ea_kpa'] = self.data.vapor_pres_def + es
+
+        tmin = self.data.tmin_c
+        tmax = self.data.tmax_c
+        length = len(tmin)
+        rs = self.data.rs
+        ea = self.data.ea_kpa
+        uz = self.data.wind_mean
+        zw = anemometer_height 
+        lats = np.full(length, self.centroid_lat)
+        doy = tmin.index.dayofyear
+        elevs = np.full(length, elev)
+
+        # refet converts rs units, everything else in target units
+        input_units = {'rs': 'w/m2'}
+        REF = refet.Daily(
+            tmin, tmax, ea, rs, uz, zw, elevs, lats, doy, method='asce',
+            input_units=input_units
+        )
+
+        self.data['ETr_mm'] = REF.etr() 
+        self.data['ETo_mm'] = REF.eto() 
+
+
+
 
