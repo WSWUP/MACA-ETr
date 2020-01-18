@@ -192,7 +192,7 @@ class MACA(object):
         pref = MACA.server_prefix
         prod = self.product_info.get(product).get('server_name')
         variable = self.var_info.get(variable).get('server_name')
-        model = f'{model}_r1i1p1'
+        model = f'{model}_r1i1p1' if not model == 'CCSM4' else f'{model}_r6i1p1'
         start = MACA.date_limits.get(scen)[0]
         end = MACA.date_limits.get(scen)[1]
         suff = 'CONUS_daily.nc#fillmismatch' if product == 'macav2' else 'CONUS_daily_aggregated.nc#fillmismatch'
