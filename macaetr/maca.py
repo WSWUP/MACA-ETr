@@ -2,11 +2,12 @@
 """
 Python tools for downloading and using MACA downscaled and bias corrected climate data including the calculation of ASCE reference evapotranspiration. 
 """
-
+import pkg_resources
 import numpy as np
 import pandas as pd
 import refet
 import xarray
+from scipy import spatial
 
 class MACA(object):
     """
@@ -264,29 +265,47 @@ class MACA(object):
                 f'WARNING: {ret} is an invalid return type option, returning the default'
                 f' numpy array, pick from:\n{ret_options}'
             )
-            self.data = ds[f'{self.var_info.get(variable).get("internal_name")}'].data
+            self.data = ds[
+                f'{self.var_info.get(variable).get("internal_name")}'
+            ].data
 
 
         return self.data
 
-    def daily_refet(self, lat, lon, elev, anemometer_height, start_date, 
-            end_date, model='GFDL-ESM2G', product='macav2', scenario='rcp85'):
+    def _get_elev(self, lat, lon, product):
+
+        inf = f'metadata/{product}_cell_data.csv'
+        try:
+            if pkg_resources.resource_exists('macaetr', inf):
+                meta_path = pkg_resources.resource_filename('macaetr', inf)
+        except:
+            print(
+                f'ERROR: could not find {product} gridcell metadata file '
+                'please provide elevation and rerun'
+            )
+            return
+        df = pd.read_csv(meta_path)
+        pts = list(zip(df.LAT,df.LON)) # grid centroid locations
+        tree = spatial.KDTree(pts)
+        index = tree.query(np.array([lat,lon]))[1]
+        return df.loc[index, 'ELEV']
+
+
+    def daily_refet(self, lat, lon, start_date, end_date, anemometer_height=10,
+            elev=None, model='GFDL-ESM2G', product='macav2', scenario='rcp85'):
         """
         Download MACAv2 or livneh data required and calculate short and tall
         (abbreviated ETo and ETr) ASCE standardized reference 
         evapotranspiration.
 
-        TODO: estimate vapor pressure from livneh variables (air temp. and q)
         """
-        if product == 'livneh':
-            print('Sorry, ref ET calcs not implemented for Livneh data yet.')
-            return
 
         if product == 'livneh':
             get_vars = ['tmax', 'tmin','rs','wind_mean','spec_hum']
         elif product == 'macav2':
-            get_vars = ['tmax','tmin','rs','rel_hum_max','rel_hum_min',
-                    'wind_east','wind_north','vapor_pres_def','spec_hum']
+            get_vars = [
+                'tmax','tmin','rs','wind_east','wind_north', 'vapor_pres_def'
+            ]
         else:
             print(f'ERROR: {product} not a valid dataset product, aborting.')
             return
@@ -303,18 +322,30 @@ class MACA(object):
         # convert temps to celcius
         self.data[['tmin_c','tmax_c','tavg_c']] =\
             self.data[['tmin','tmax','tavg']] - 273.15
+        
+        if elev is None:
+            # get it from metadata based on product
+            elev = self._get_elev(lat, lon, product)
+
+        self.elev = elev
+        length = len(self.data)
 
         if product == 'macav2':
             self.data['wind_mean'] = self.data[
                 ['eastward_wind','northward_wind']
-            ].abs().mean(1) # mean of absolute wind speeds
+            ].abs().mean(1) # mean of absolute wind velocities
             # estimate sat. vapor press
-            es = 0.6108*np.exp(17.27*self.data.tavg_c / (self.data.tavg_c + 237.3))
+            es = 0.6108*np.exp(17.27*self.data.tavg_c/(self.data.tavg_c+237.3))
             self.data['ea_kpa'] = self.data.vapor_pres_def + es
+
+        elif product == 'livneh':
+            self.data['pa'] =  np.full(length, refet.calcs._air_pressure(elev))
+            self.data['ea_kpa'] = refet.calcs._actual_vapor_pressure(
+                self.data.specific_humidity, self.data.pa
+            )
 
         tmin = self.data.tmin_c
         tmax = self.data.tmax_c
-        length = len(tmin)
         rs = self.data.rs
         ea = self.data.ea_kpa
         uz = self.data.wind_mean
