@@ -331,10 +331,10 @@ class MACA(object):
         length = len(self.data)
 
         if product == 'macav2':
-            self.data['wind_mean'] = self.data[
-                ['eastward_wind','northward_wind']
-            ].abs().mean(1) # mean of absolute wind velocities
-            # estimate sat. vapor press
+            self.data['wind_mean'] = np.sqrt(
+                self.data['eastward_wind']**2 + self.data['northward_wind']**2
+            )
+            # estimate sat. vapor press and use vpd
             es = 0.6108*np.exp(17.27*self.data.tavg_c/(self.data.tavg_c+237.3))
             self.data['ea_kpa'] = self.data.vapor_pres_def + es
 
