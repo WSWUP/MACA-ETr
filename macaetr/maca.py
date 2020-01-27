@@ -292,7 +292,8 @@ class MACA(object):
 
 
     def daily_refet(self, lat, lon, start_date, end_date, anemometer_height=10,
-            elev=None, model='GFDL-ESM2G', product='macav2', scenario='rcp85'):
+            elev=None, model='GFDL-ESM2G', product='macav2', scenario='rcp85',
+            get_add_met_vars=None):
         """
         Download MACAv2 or livneh data required and calculate short and tall
         (abbreviated ETo and ETr) ASCE standardized reference 
@@ -309,6 +310,19 @@ class MACA(object):
         else:
             print(f'ERROR: {product} not a valid dataset product, aborting.')
             return
+
+        if get_add_met_vars == 'all':
+            get_vars = self.product_info.get(product).get('variables')
+        elif isinstance(get_add_met_vars, (tuple,list)):
+            for v in get_add_met_vars:
+                if v not in self.product_info.get(product).get('variables'):
+                    print(
+                        f'WARNING: {v} not a valid variable for {product} '
+                        'not downloading'
+                    )
+                elif v not in get_vars:
+                    get_vars.append(v)
+
         # wipe out any existing instance data to avoid issues
         self.data = None
 
@@ -363,7 +377,6 @@ class MACA(object):
 
         self.data['ETr_mm'] = REF.etr() 
         self.data['ETo_mm'] = REF.eto() 
-
 
 
 
