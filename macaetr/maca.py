@@ -291,8 +291,8 @@ class MACA(object):
         return df.loc[index, 'ELEV']
 
 
-    def daily_refet(self, lat, lon, start_date, end_date, anemometer_height=10,
-            elev=None, model='GFDL-ESM2G', product='macav2', scenario='rcp85',
+    def daily_refet(self, lat, lon, start_date, end_date, elev=None, 
+            model='GFDL-ESM2G', product='macav2', scenario='rcp85',
             get_add_met_vars=None):
         """
         Download MACAv2 or livneh data required and calculate short and tall
@@ -358,12 +358,17 @@ class MACA(object):
                 self.data.specific_humidity, self.data.pa
             )
 
+        # scale MACA 10m wind to 2m
+        zw = 2 
+        self.data.wind_mean = refet.calcs._wind_height_adjust(
+            self.data.wind_mean, zw 
+        )
+
         tmin = self.data.tmin_c
         tmax = self.data.tmax_c
         rs = self.data.rs
         ea = self.data.ea_kpa
         uz = self.data.wind_mean
-        zw = anemometer_height 
         lats = np.full(length, self.centroid_lat)
         doy = tmin.index.dayofyear
         elevs = np.full(length, elev)
@@ -377,6 +382,9 @@ class MACA(object):
 
         self.data['ETr_mm'] = REF.etr() 
         self.data['ETo_mm'] = REF.eto() 
+
+        self.data.rename(columns={'wind_mean':'wind_2m'}, inplace=True)
+
 
 
 
