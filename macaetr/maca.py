@@ -355,7 +355,6 @@ class MACA(object):
                 17.27*self.data.tmin_c/(self.data.tmin_c+237.3)
             )
             es = (es_tmax + es_tmin) / 2
-            self.data['ea_kpa'] = self.data.vapor_pres_def + es
             self.data['pa'] = np.full(length, refet.calcs._air_pressure(elev))
             self.data['ea_kpa'] = refet.calcs._actual_vapor_pressure(
                 self.data.specific_humidity, self.data.pa
