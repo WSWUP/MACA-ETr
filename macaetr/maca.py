@@ -305,8 +305,7 @@ class MACA(object):
             get_vars = ['tmax', 'tmin','rs','wind_mean','spec_hum']
         elif product == 'macav2':
             get_vars = [
-                'tmax','tmin','rs','wind_east','wind_north', 'vapor_pres_def'
-            ]
+                'tmax','tmin','rs','wind_east','wind_north', 'spec_hum']
         else:
             print(f'ERROR: {product} not a valid dataset product, aborting.')
             return
@@ -348,10 +347,10 @@ class MACA(object):
             self.data['wind_mean'] = np.sqrt(
                 self.data['eastward_wind']**2 + self.data['northward_wind']**2
             )
-            es_tmax = 0.6108np.exp(
+            es_tmax = 0.6108*np.exp(
                 17.27*self.data.tmax_c/(self.data.tmax_c+237.3)
             )
-            es_tmin = 0.6108np.exp(
+            es_tmin = 0.6108*np.exp(
                 17.27*self.data.tmin_c/(self.data.tmin_c+237.3)
             )
             es = (es_tmax + es_tmin) / 2
@@ -361,7 +360,7 @@ class MACA(object):
             )
 
         elif product == 'livneh':
-            self.data['pa'] =  np.full(length, refet.calcs._air_pressure(elev))
+            self.data['pa'] = np.full(length, refet.calcs._air_pressure(elev))
             self.data['ea_kpa'] = refet.calcs._actual_vapor_pressure(
                 self.data.specific_humidity, self.data.pa
             )
