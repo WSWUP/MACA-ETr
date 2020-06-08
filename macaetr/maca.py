@@ -366,7 +366,7 @@ class MACA(object):
             )
 
         # scale MACA 10m wind to 2m
-        zw = 2 
+        zw = 10
         self.data.wind_mean = refet.calcs._wind_height_adjust(
             self.data.wind_mean, zw 
         )
