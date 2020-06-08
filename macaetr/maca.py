@@ -348,9 +348,14 @@ class MACA(object):
             self.data['wind_mean'] = np.sqrt(
                 self.data['eastward_wind']**2 + self.data['northward_wind']**2
             )
-            # estimate sat. vapor press and use vpd
-            es = 0.6108*np.exp(17.27*self.data.tavg_c/(self.data.tavg_c+237.3))
-            self.data['ea_kpa'] = self.data.vapor_pres_def + es
+            # # estimate sat. vapor press and use vpd (ORIGINAL CODE for ea)
+            # es = 0.6108*np.exp(17.27*self.data.tavg_c/(self.data.tavg_c+237.3))
+            # self.data['ea_kpa'] = self.data.vapor_pres_def + es
+            # Proposed Fix for ea calculation error, 6/7/2020
+            self.data['pa'] =  np.full(length, refet.calcs._air_pressure(elev))
+            self.data['ea_kpa'] = refet.calcs._actual_vapor_pressure(
+                self.data.specific_humidity, self.data.pa
+            )
 
         elif product == 'livneh':
             self.data['pa'] =  np.full(length, refet.calcs._air_pressure(elev))
