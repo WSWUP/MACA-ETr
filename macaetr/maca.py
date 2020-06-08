@@ -375,6 +375,7 @@ class MACA(object):
         tmax = self.data.tmax_c
         rs = self.data.rs
         ea = self.data.ea_kpa
+        # uz is now at 2m (LINE 370)
         uz = self.data.wind_mean
         lats = np.full(length, self.centroid_lat)
         doy = tmin.index.dayofyear
@@ -383,7 +384,7 @@ class MACA(object):
         # refet converts rs units, everything else in target units
         input_units = {'rs': 'w/m2'}
         REF = refet.Daily(
-            tmin, tmax, ea, rs, uz, zw, elevs, lats, doy, method='asce',
+            tmin, tmax, ea, rs, uz, 2, elevs, lats, doy, method='asce',
             input_units=input_units
         )
 
