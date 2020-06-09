@@ -331,11 +331,15 @@ class MACA(object):
                 ret='pd_dataframe'
             )
 
+        # match float type from ee (should this be done here of in download fnc?)
+        self.data = self.data.astype(float)
+
         self.data['tavg'] = self.data[['tmin','tmax']].mean(1)
         # convert temps to celcius
         self.data[['tmin_c','tmax_c','tavg_c']] =\
             self.data[['tmin','tmax','tavg']] - 273.15
-        
+
+
         if elev is None:
             # get it from metadata based on product
             elev = self._get_elev(lat, lon, product)
@@ -366,10 +370,11 @@ class MACA(object):
             )
 
         # scale MACA 10m wind to 2m
-        zw = 10
+        zw_maca = 10
         self.data.wind_mean = refet.calcs._wind_height_adjust(
-            self.data.wind_mean, zw 
+            self.data.wind_mean, zw_maca
         )
+        zw_output = 2
 
         tmin = self.data.tmin_c
         tmax = self.data.tmax_c
@@ -384,7 +389,7 @@ class MACA(object):
         # refet converts rs units, everything else in target units
         input_units = {'rs': 'w/m2'}
         REF = refet.Daily(
-            tmin, tmax, ea, rs, uz, 2, elevs, lats, doy, method='asce',
+            tmin, tmax, ea, rs, uz, zw_output, elevs, lats, doy, method='asce',
             input_units=input_units
         )
 
